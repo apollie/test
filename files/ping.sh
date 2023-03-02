@@ -11,4 +11,5 @@ else
 fi
 
 x=$(echo $name | sed "s/.$/$i/g")
-ping -c3 $x.$zone > ping.results
+j=$(ping -c1 $x.$zone | grep "compute.amazonaws.com")
+echo "{\"result\":\"$j\"}" > ping.results

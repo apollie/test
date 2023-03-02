@@ -30,12 +30,26 @@ resource "aws_instance" "ec2_instance" {
         source      = "files/ping.sh"
         destination = "/home/ec2-user/ping.sh"
     }
+}
 
+resource "null_resource" "upload" {
+    count = var.instance_count
+    connection {
+        host  = aws_instance.ec2_instance[count.index].public_ip
+        type  = "ssh"
+        user  = "ec2-user"
+        private_key = file(var.private_key)
+    }
     provisioner "remote-exec" {
         inline = [
         "chmod +x /home/ec2-user/ping.sh",
         "/home/ec2-user/ping.sh",
+        "exit 0"
         ]
+    }
+    depends_on = [aws_instance.ec2_instance,aws_route53_record.vm]
+    triggers = {
+        always_run = "${timestamp()}"
     }
 }
 
@@ -47,10 +61,15 @@ resource "null_resource" "file" {
         user  = "ec2-user"
         private_key = file(var.private_key)
     }
-    provisioner "local-exec" {
-        command = "cat /home/ec2-user/ping.results"
+    provisioner "remote-exec" {
+        inline = [
+            "cat /home/ec2-user/ping.results"
+        ]
     }
-    depends_on = [aws_instance.ec2_instance]
+    depends_on = [null_resource.upload]
+    triggers = {
+        always_run = "${timestamp()}"
+    }
 }
 
 resource "aws_key_pair" "my_key" {
@@ -67,11 +86,11 @@ resource "aws_route53_zone" "private" {
 }
 
 resource "aws_route53_record" "vm" {
-  count = 3
+  count = var.instance_count
   zone_id = aws_route53_zone.private.zone_id
   name    = format("%s%03d", var.prefix, count.index + 1)
   type    = "A"
-  ttl     = 300
+  ttl     = 10
   records = [aws_instance.ec2_instance[count.index].public_ip]
 }
 
